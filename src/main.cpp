@@ -5,17 +5,19 @@
 #include <imgui_impl_sdl.h>
 #include <imgui_internal.h>
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
+using std::string;
 using namespace ImGui;
 
+// Constants for node and connection appearance.
 const auto NodeColor = ImColor(1.0f, 1.0f, 1.0f, 1.0f);
 const auto NodeOutlineColor = ImColor(0.4f, 0.4f, 0.4f, 1.0f);
 const auto SocketColor = ImColor(0.8f, 0.8f, 0.8f, 1.0f);
 const auto SocketOutlineColor = ImColor(0.0f, 0.0f, 0.0f, 1.0f);
 const auto CurveColor = ImColor(0.8f, 0.8f, 0.8f, 1.0f);
-
 constexpr float NodeRounding = 4.0f;
 constexpr float SocketRadius = 4.0f;
 constexpr float BezierCurveWidth = 2.0f;
@@ -24,6 +26,7 @@ const auto NodeSize = ImVec2(150.0f, 100.0f);
 constexpr float SocketYSpacing = 20.0f;
 constexpr int NodeIdMod = 5;
 
+// Struct representing a single node in the graph.
 template<typename T>
 struct Node {
     ImVec2 Pos;
@@ -32,7 +35,7 @@ struct Node {
     std::vector<int> Outputs;
 
     // Draw the node.
-    void Draw(ImDrawList *draw_list) {
+    void Draw(ImDrawList *draw_list) const {
         const ImVec2 node_rect_min = Pos;
         const ImVec2 node_rect_max = Pos + NodeSize;
 
@@ -68,7 +71,7 @@ struct TwoChildNode {
     Node<T> Child2;
 
     // Draw the node.
-    void Draw(ImDrawList *draw_list) {
+    void Draw(ImDrawList *draw_list) const {
         if (LayoutType == TwoChildNodeLayoutType::Parallel) {
             // Draw child nodes vertically.
             Child1.Pos = ImVec2(Child1.Pos.x, Child1.Pos.y);
@@ -102,8 +105,8 @@ struct Connections {
     }
 
     // Draw connections.
-    void Draw(ImDrawList *draw_list, const std::vector<Node<T>> &nodes) {
-        // Replace this comment with your implementation.
+    void Draw(ImDrawList *draw_list, const std::vector<Node<T>> &nodes) const {
+        // TODO Implement this function.
     }
 };
 
@@ -111,6 +114,13 @@ template<typename T>
 struct Graph {
     std::vector<Node<T>> nodes;
     Connections<T> connections;
+
+    void Draw(ImDrawList *draw_list) const {
+        for (const auto &node : nodes) {
+            node.Draw(draw_list);
+        }
+        connections.Draw(draw_list, nodes);
+    }
 
     // Find the nearest socket to a given position.
     bool FindSocket(ImVec2 pos, int &node_id, int &socket_id) {
@@ -139,11 +149,12 @@ struct Graph {
     }
 };
 
-int main(int, char **) {
+// Populates the provided `window` pointer with an SDL window.
+SDL_Window *SetupWindow() {
     // Setup SDL.
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
-        return -1;
+        return nullptr;
     }
 
     // Setup window.
@@ -156,7 +167,28 @@ int main(int, char **) {
 #if __APPLE__
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 #endif
-    SDL_Window *window = SDL_CreateWindow("Node Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    return SDL_CreateWindow("Node Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+}
+
+void Cleanup(SDL_Window *window, SDL_GLContext &gl_context) {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+}
+
+int main(int, char **) {
+    // Create the graph.
+    Graph<int> graph;
+
+    // TODO Construct an example graph.
+
+    SDL_Window *window = SetupWindow();
+    if (!window) return 1;
+
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync.
@@ -174,53 +206,8 @@ int main(int, char **) {
 
     // Set up style.
     ImGui::StyleColorsDark();
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    // Load a font.
-    io.Fonts->AddFontFromFileTTF("arial.ttf", 16.0f);
-    if (io.Fonts->Fonts.empty()) {
-        printf("Failed to load font\n");
-        return 1;
-    }
-
-    // Create the graph.
-    Graph<int> graph;
-
-    // Create some nodes.
-    Node<int> node1;
-    node1.Pos = ImVec2(10, 10);
-    node1.Data = 1;
-    graph.nodes.push_back(node1);
-
-    Node<int> node2;
-    node2.Pos = ImVec2(200, 10);
-    node2.Data = 2;
-    graph.nodes.push_back(node2);
-
-    Node<int> node3;
-    node3.Pos = ImVec2(10, 200);
-    node3.Data = 3;
-    graph.nodes.push_back(node3);
-
-    Node<int> node4;
-    node4.Pos = ImVec2(200, 200);
-    node4.Data = 4;
-    graph.nodes.push_back(node4);
-
-    // Connect some nodes.
-    graph.connections[0] = ImVec2(1, 0);
-    graph.nodes[1].Inputs.push_back(0);
-    graph.nodes[0].Outputs.push_back(0);
-
-    graph.connections[1] = ImVec2(2, 0);
-    graph.nodes[2].Inputs.push_back(1);
-    graph.nodes[1].Outputs.push_back(1);
-
-    graph.connections[2] = ImVec2(3, 0);
-    graph.nodes[3].Inputs.push_back(2);
-    graph.nodes[2].Outputs.push_back(2);
-
-    // Main loop
+    // Main loop:
     bool done = false;
     while (!done) {
         // Poll and handle events
@@ -231,31 +218,29 @@ int main(int, char **) {
                 done = true;
         }
 
-        // Start the ImGui frame
+        // Start the ImGui frame.
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame(window);
         ImGui::NewFrame();
 
-        // Draw the node graph
-        graph.Draw();
+        auto *draw_list = GetWindowDrawList();
 
-        // Render the ImGui frame
+        // TODO Construct a new window.
+
+        graph.Draw(draw_list); // Draw the node graph.
+
+        // Render the ImGui frame.
         ImGui::Render();
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+
+        ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
     }
 
-    // Cleanup
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
-
-    SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    Cleanup(window, gl_context);
 
     return 0;
 }
