@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ImGui {
+using namespace ImGui;
 
 const auto NodeColor = ImColor(1.0f, 1.0f, 1.0f, 1.0f);
 const auto NodeOutlineColor = ImColor(0.4f, 0.4f, 0.4f, 1.0f);
@@ -31,23 +31,23 @@ struct Node {
     std::vector<int> Inputs;
     std::vector<int> Outputs;
 
-    // Draw the node
+    // Draw the node.
     void Draw(ImDrawList *draw_list) {
         const ImVec2 node_rect_min = Pos;
         const ImVec2 node_rect_max = Pos + NodeSize;
 
-        // Draw node box
+        // Draw the box.
         draw_list->AddRectFilled(node_rect_min, node_rect_max, NodeColor, NodeRounding);
         draw_list->AddRect(node_rect_min, node_rect_max, NodeOutlineColor, NodeRounding);
 
-        // Draw input sockets
+        // Draw the input sockets.
         for (int socket_index = 0; socket_index < Inputs.size(); socket_index++) {
             ImVec2 socket_pos = node_rect_min + ImVec2(0, SocketYSpacing * socket_index);
             draw_list->AddCircleFilled(socket_pos, SocketRadius, SocketColor);
             draw_list->AddCircle(socket_pos, SocketRadius, SocketOutlineColor);
         }
 
-        // Draw output sockets
+        // Draw the output sockets.
         for (int socket_index = 0; socket_index < Outputs.size(); socket_index++) {
             ImVec2 socket_pos = node_rect_max + ImVec2(0, SocketYSpacing * socket_index);
             draw_list->AddCircleFilled(socket_pos, SocketRadius, SocketColor);
@@ -67,18 +67,18 @@ struct TwoChildNode {
     Node<T> Child1;
     Node<T> Child2;
 
-    // Draw the node
+    // Draw the node.
     void Draw(ImDrawList *draw_list) {
         if (LayoutType == TwoChildNodeLayoutType::Parallel) {
-            // Draw child nodes vertically
+            // Draw child nodes vertically.
             Child1.Pos = ImVec2(Child1.Pos.x, Child1.Pos.y);
             Child2.Pos = ImVec2(Child2.Pos.x, Child1.Pos.y + NodeSize.y);
             Child1.Draw(draw_list);
             Child2.Draw(draw_list);
         } else if (LayoutType == TwoChildNodeLayoutType::Sequential) {
-            // Draw child nodes horizontally
+            // Draw child nodes horizontally.
             Child1.Pos = ImVec2(Child1.Pos.x, Child1.Pos.y);
-            Child2.Pos = ImVec2(Child1.Pos.x + NodeSize.x, Child1.Pos.y);
+            Child2.Pos = ImVec2(Child1.Pos.x + NodeSize.x, Child2.Pos.y);
             Child1.Draw(draw_list);
             Child2.Draw(draw_list);
         }
@@ -87,28 +87,23 @@ struct TwoChildNode {
 
 template<typename T>
 struct Connections {
-    std::unordered_map<int, ImVec2> connections;
+    std::unordered_map<int, std::vector<int>> Inputs;
+    std::unordered_map<int, std::vector<int>> Outputs;
 
-    // Draw connections
-    void Draw(ImDrawList *draw_list, const std::vector<Node<T>> &nodes) {
-        for (auto &connection : connections) {
-            int output_index = connection.first;
-            int input_index = connection.second.x;
-            ImVec2 output_pos = nodes[output_index].Pos;
-            ImVec2 input_pos = connection.second;
-            output_pos.x += CurveControlPointXOffset;
-            output_pos.y += SocketYSpacing * (output_index % NodeIdMod);
-            input_pos.x += CurveControlPointXOffset;
-            input_pos.y += SocketYSpacing * (input_index % NodeIdMod);
-            draw_list->AddBezierCurve(
-                output_pos,
-                output_pos + ImVec2(CurveControlPointXOffset, 0),
-                input_pos + ImVec2(-CurveControlPointXOffset, 0),
-                input_pos,
-                CurveColor,
-                BezierCurveWidth
-            );
+    std::vector<int> &operator[](int node_id) {
+        // Check if the node has any inputs or outputs.
+        if (Inputs.count(node_id) > 0) {
+            return Inputs[node_id];
+        } else if (Outputs.count(node_id) > 0) {
+            return Outputs[node_id];
         }
+        // Otherwise, throw an exception.
+        throw std::out_of_range("Node with id '" + std::to_string(node_id) + "' does not exist in Connections struct");
+    }
+
+    // Draw connections.
+    void Draw(ImDrawList *draw_list, const std::vector<Node<T>> &nodes) {
+        // Replace this comment with your implementation.
     }
 };
 
@@ -117,7 +112,7 @@ struct Graph {
     std::vector<Node<T>> nodes;
     Connections<T> connections;
 
-    // Find the nearest socket to a given position
+    // Find the nearest socket to a given position.
     bool FindSocket(ImVec2 pos, int &node_id, int &socket_id) {
         for (int node_index = 0; node_index < nodes.size(); node_index++) {
             auto &node = nodes[node_index];
@@ -125,72 +120,105 @@ struct Graph {
             ImVec2 node_rect_max = node.Pos + NodeSize;
             if (pos.x >= node_rect_min.x && pos.y >= node_rect_min.y && pos.x <= node_rect_max.x && pos.y <= node_rect_max.y) {
                 if (pos.x - node_rect_min.x < SocketRadius) {
-                    socket_id = (pos.y - node_rect_min.y) / SocketYSpacing;
-                    if (socket_id >= 0 && socket_id < node.Inputs.size()) {
-                        node_id = node_index;
-                        return true;
-                    }
+                    socket_id = static_cast<int>((pos.y - node_rect_min.y) / SocketYSpacing);
+                    node_id = node_index;
+                    return true;
                 } else if (node_rect_max.x - pos.x < SocketRadius) {
-                    socket_id = (pos.y - node_rect_min.y) / SocketYSpacing;
-                    if (socket_id >= 0 && socket_id < node.Outputs.size()) {
-                        node_id = node_index;
-                        return true;
-                    }
+                    socket_id = static_cast<int>((pos.y - node_rect_min.y) / SocketYSpacing);
+                    node_id = node_index;
+                    return true;
                 }
             }
         }
         return false;
     }
 
-    // Draw the graph
-    void Draw(ImDrawList *draw_list) {
-        for (auto &node : nodes) {
-            node.Draw(draw_list);
-        }
-        connections.Draw(draw_list, nodes);
+    // Add a connection.
+    void AddConnection(int output_index, int input_index) {
+        connections.connections[output_index] = ImVec2(input_index, 0);
     }
 };
 
-} // namespace ImGui
+int main(int, char **) {
+    // Setup SDL.
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
+        printf("Error: %s\n", SDL_GetError());
+        return -1;
+    }
 
-int main(int argc, char **argv) {
-    // Initialize SDL and ImGui
-    SDL_Init(SDL_INIT_EVERYTHING);
+    // Setup window.
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#if __APPLE__
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+#endif
+    SDL_Window *window = SDL_CreateWindow("Node Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, gl_context);
+    SDL_GL_SetSwapInterval(1); // Enable vsync.
+
+    // Create the ImGui context.
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    ImGui_ImplSDL2_InitForOpenGL(SDL_GL_GetCurrentWindow(), SDL_GL_GetCurrentContext());
-    ImGui_ImplOpenGL3_Init("#version 330");
+    io.ConfigWindowsResizeFromEdges = true;
 
-    // Create a node graph
-    ImGui::Graph<int> graph;
-    graph.nodes.emplace_back(ImGui::Node<int>{
-        ImVec2(100.0f, 100.0f),
-        0,
-        {0},
-        {1}});
-    graph.nodes.emplace_back(ImGui::Node<int>{
-        ImVec2(300.0f, 100.0f),
-        1,
-        {1},
-        {0}});
-    graph.connections.connections = {
-        {0, ImVec2(1, 0)}};
+    // Set up ImGui binding.
+    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL3_Init("#version 150");
 
-    // Create a two-child node
-    ImGui::TwoChildNode<int> two_child_node{
-        ImGui::TwoChildNodeLayoutType::Sequential,
-        ImGui::Node<int>{
-            ImVec2(100.0f, 300.0f),
-            2,
-            {0},
-            {0, 1}},
-        ImGui::Node<int>{
-            ImVec2(250.0f, 300.0f),
-            3,
-            {1},
-            {0}}};
+    // Set up style.
+    ImGui::StyleColorsDark();
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    // Load a font.
+    io.Fonts->AddFontFromFileTTF("arial.ttf", 16.0f);
+    if (io.Fonts->Fonts.empty()) {
+        printf("Failed to load font\n");
+        return 1;
+    }
+
+    // Create the graph.
+    Graph<int> graph;
+
+    // Create some nodes.
+    Node<int> node1;
+    node1.Pos = ImVec2(10, 10);
+    node1.Data = 1;
+    graph.nodes.push_back(node1);
+
+    Node<int> node2;
+    node2.Pos = ImVec2(200, 10);
+    node2.Data = 2;
+    graph.nodes.push_back(node2);
+
+    Node<int> node3;
+    node3.Pos = ImVec2(10, 200);
+    node3.Data = 3;
+    graph.nodes.push_back(node3);
+
+    Node<int> node4;
+    node4.Pos = ImVec2(200, 200);
+    node4.Data = 4;
+    graph.nodes.push_back(node4);
+
+    // Connect some nodes.
+    graph.connections[0] = ImVec2(1, 0);
+    graph.nodes[1].Inputs.push_back(0);
+    graph.nodes[0].Outputs.push_back(0);
+
+    graph.connections[1] = ImVec2(2, 0);
+    graph.nodes[2].Inputs.push_back(1);
+    graph.nodes[1].Outputs.push_back(1);
+
+    graph.connections[2] = ImVec2(3, 0);
+    graph.nodes[3].Inputs.push_back(2);
+    graph.nodes[2].Outputs.push_back(2);
 
     // Main loop
     bool done = false;
@@ -199,36 +227,34 @@ int main(int argc, char **argv) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
-            if (event.type == SDL_QUIT) {
+            if (event.type == SDL_QUIT)
                 done = true;
-            }
         }
 
-        // Start a new frame
+        // Start the ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(SDL_GL_GetCurrentWindow());
+        ImGui_ImplSDL2_NewFrame(window);
         ImGui::NewFrame();
 
         // Draw the node graph
-        graph.Draw(ImGui::GetBackgroundDrawList());
+        graph.Draw();
 
-        // Draw the two-child node
-        two_child_node.Draw(ImGui::GetBackgroundDrawList());
-
-        // Render the GUI
+        // Render the ImGui frame
         ImGui::Render();
-        SDL_GL_MakeCurrent(SDL_GL_GetCurrentWindow(), SDL_GL_GetCurrentContext());
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SDL_GL_SwapWindow(SDL_GL_GetCurrentWindow());
+        SDL_GL_SwapWindow(window);
     }
 
-    // Clean up
+    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+
+    SDL_GL_DeleteContext(gl_context);
+    SDL_DestroyWindow(window);
     SDL_Quit();
 
     return 0;
